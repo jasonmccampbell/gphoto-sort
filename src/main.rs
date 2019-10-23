@@ -41,15 +41,32 @@ fn main() {
 fn move_files(src: &Path, dst: &Path) -> bool {
     for entry in WalkDir::new(src.join("Google Photos"))
         .into_iter()
+        .filter_entry(|e| e.file_name().to_str().map_or(false, |s| !s.starts_with("Hangout")))
         .filter_map(|e| e.ok())
         .filter(|e| !e.path().is_dir())
         .filter(is_of_interest)
     {
         let path = entry.path();
-        // let (year, month) = extract_times(path);
-        println!("Interesting path: {}", path.display());
+        if let Some(filename) = path.file_name() {
+            let filename_str = filename.to_string_lossy();
+            if let Some((year, month)) = extract_year_month(&filename_str) {
+                move_or_delete(&path, dst.join(year).join(month).join(filename));
+            }
+        }
     }
     true
+}
+
+fn move_or_delete(src: &Path, dst: PathBuf) {
+    println!("Moving {} to {}", src.display(), dst.display());
+}
+
+fn extract_year_month(filename: &str) -> Option<(&str, &str)> {
+    if filename.starts_with("IMG_") || filename.starts_with("VID_") {
+        Some((&filename[4..8], &filename[8..10]))
+    } else {
+        None
+    }
 }
 
 /// Flags files of interest, like actual images/videos, and rejects the metadata
