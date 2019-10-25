@@ -1,9 +1,12 @@
 extern crate clap;
+extern crate regex;
 extern crate walkdir;
 
 use clap::{App, Arg};
 use std::path::*;
+use regex::Regex;
 use walkdir::{DirEntry, WalkDir};
+
 
 fn main() {
     let matches = App::new("GPhoto-Sort")
@@ -50,7 +53,11 @@ fn move_files(src: &Path, dst: &Path) -> bool {
         if let Some(filename) = path.file_name() {
             let filename_str = filename.to_string_lossy();
             if let Some((year, month)) = extract_year_month(&filename_str) {
-                move_or_delete(&path, dst.join(year).join(month).join(filename));
+                let dst_dir = dst.join(year).join(month);
+                if !dst_dir.exists() {
+                    std::fs::create_dir_all(&dst_dir).expect(&format!("Unable to create directory {}", dst_dir.display()));
+                }
+                move_or_delete(&path, dst_dir.join(filename));
             }
         }
     }
@@ -58,13 +65,20 @@ fn move_files(src: &Path, dst: &Path) -> bool {
 }
 
 fn move_or_delete(src: &Path, dst: PathBuf) {
-    println!("Moving {} to {}", src.display(), dst.display());
+    if dst.exists() {
+        println!("{} is duplicate - delete", src.display());
+        std::fs::remove_file(src).expect(&format!("Unable to delete file {}", src.display()));
+    } else {
+        println!("Moving {} to {}", src.display(), dst.display());
+        std::fs::rename(&src, &dst).expect(&format!("Move of {} to {} failed", src.display(), dst.display()));
+    }
 }
 
 fn extract_year_month(filename: &str) -> Option<(&str, &str)> {
     if filename.starts_with("IMG_") || filename.starts_with("VID_") {
         Some((&filename[4..8], &filename[8..10]))
     } else {
+        // TODO: Handle file names without a prefix, lie "1901-02-04 01:02:03.jpg"
         None
     }
 }
