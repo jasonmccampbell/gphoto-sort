@@ -7,6 +7,10 @@ use regex::Regex;
 use std::path::*;
 use walkdir::{DirEntry, WalkDir};
 
+// History:
+//  2019-Nov   jason   First version, does what I want
+//                     Duplicate checks are simple name comparisons, most error checks are 'unwrap' asserts
+
 fn main() {
     let matches = App::new("GPhoto-Sort")
         .version("0.1.0")
@@ -24,6 +28,7 @@ fn main() {
                 .help("Destination Goole Photos directory organized by <year>/<month>"),
         )
         .get_matches();
+
     let src = std::path::Path::new(matches.value_of("source-takeout-dir").unwrap());
     let dst = std::path::Path::new(matches.value_of("dest-gphotos-dir").unwrap());
     std::process::exit({
@@ -32,7 +37,7 @@ fn main() {
         } else if !move_files(src, dst) {
             1
         } else {
-            1
+            0 // Success
         }
     });
 }
@@ -65,6 +70,9 @@ fn move_files(src: &Path, dst: &Path) -> bool {
     true
 }
 
+/// Move the file into the Google Photo's directory if new, otherwise we can delete it if a duplicate.
+///
+/// *NOTE:* 'duplicate' simply means the file exists with the same name, no MD5 or similar checking is done.
 fn move_or_delete(src: &Path, dst: PathBuf) {
     if dst.exists() {
         println!("{} is duplicate - delete", src.display());
@@ -75,6 +83,17 @@ fn move_or_delete(src: &Path, dst: PathBuf) {
     }
 }
 
+/// Figures out the year and month from the following file name formats:
+///   * IMG_<year>_<month>_<day>*.jpg
+///   * VID_<year>_<month>_<day>*.mp4
+///   * <year>_<month>_<day>*.<ext>
+///
+/// For those new to Rust and compiler geeks, the signature of this function impresses me. The 'a annotation
+/// means the result has the same lifetime as 'filename'. That is, the resulting 'str' values are
+/// views using the data from wherever 'filename' gets it from. But note that we return the string views from
+/// 'caps' which is returned by the regex. The compiler correctly sorts all of this out "knowing" that 'filename'
+/// was passed in so these strings views are backed by the memory used for 'filename'. Through all of this
+/// we never have to copy parts of 'filename' around!
 fn extract_year_month<'a>(unprefix_re: &Regex, filename: &'a str) -> Option<(&'a str, &'a str)> {
     if filename.starts_with("IMG_") || filename.starts_with("VID_") {
         Some((&filename[4..8], &filename[8..10]))
@@ -91,7 +110,7 @@ fn extract_year_month<'a>(unprefix_re: &Regex, filename: &'a str) -> Option<(&'a
 fn is_of_interest(entry: &DirEntry) -> bool {
     match entry.path().extension() {
         None => false,
-        Some(ext) => ext.eq("jpg") || ext.eq("mp4"),
+        Some(ext) => ext.eq("jpg") || ext.eq("JPG") || ext.eq("mp4") || ext.eq("MP4"),
     }
 }
 
