@@ -3,10 +3,9 @@ extern crate regex;
 extern crate walkdir;
 
 use clap::{App, Arg};
-use std::path::*;
 use regex::Regex;
+use std::path::*;
 use walkdir::{DirEntry, WalkDir};
-
 
 fn main() {
     let matches = App::new("GPhoto-Sort")
@@ -42,6 +41,8 @@ fn main() {
 /// rubbish / metadata files. And found files are checked against the destination directory and moved over if they don't
 /// already exist.
 fn move_files(src: &Path, dst: &Path) -> bool {
+    let unprefix_re = Regex::new(r"^(\d{4})-(\d{2})-(\d{2}).*[.]([a-zA-Z0-9]+)$").unwrap();
+
     for entry in WalkDir::new(src.join("Google Photos"))
         .into_iter()
         .filter_entry(|e| e.file_name().to_str().map_or(false, |s| !s.starts_with("Hangout")))
@@ -52,7 +53,7 @@ fn move_files(src: &Path, dst: &Path) -> bool {
         let path = entry.path();
         if let Some(filename) = path.file_name() {
             let filename_str = filename.to_string_lossy();
-            if let Some((year, month)) = extract_year_month(&filename_str) {
+            if let Some((year, month)) = extract_year_month(&unprefix_re, &filename_str) {
                 let dst_dir = dst.join(year).join(month);
                 if !dst_dir.exists() {
                     std::fs::create_dir_all(&dst_dir).expect(&format!("Unable to create directory {}", dst_dir.display()));
@@ -74,11 +75,14 @@ fn move_or_delete(src: &Path, dst: PathBuf) {
     }
 }
 
-fn extract_year_month(filename: &str) -> Option<(&str, &str)> {
+fn extract_year_month<'a>(unprefix_re: &Regex, filename: &'a str) -> Option<(&'a str, &'a str)> {
     if filename.starts_with("IMG_") || filename.starts_with("VID_") {
         Some((&filename[4..8], &filename[8..10]))
+    } else if let Some(caps) = unprefix_re.captures(filename) {
+        // Captures 1 and 2 are year and month so files can get sorted under the right directory
+        // Ignore 3 and 4, the day and extension
+        Some((caps.get(1).unwrap().as_str(), caps.get(2).unwrap().as_str()))
     } else {
-        // TODO: Handle file names without a prefix, lie "1901-02-04 01:02:03.jpg"
         None
     }
 }
