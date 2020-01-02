@@ -1,9 +1,13 @@
 extern crate clap;
+extern crate crypto;
 extern crate regex;
 extern crate walkdir;
 
 use clap::{App, Arg};
+use crypto::digest::Digest;
+use crypto::md5;
 use regex::Regex;
+use std::io::Read;
 use std::path::*;
 use walkdir::{DirEntry, WalkDir};
 
@@ -27,14 +31,18 @@ fn main() {
                 .required(true)
                 .help("Destination Goole Photos directory organized by <year>/<month>"),
         )
+        .arg(
+            Arg::with_name("dry-run")
+                .long("dry-run")
+                .short("n")
+                .help("Report actions to be taken, but don't do anything"),
+        )
         .get_matches();
 
     let src = std::path::Path::new(matches.value_of("source-takeout-dir").unwrap());
     let dst = std::path::Path::new(matches.value_of("dest-gphotos-dir").unwrap());
     std::process::exit({
-        if !validate_takeout_dir(src) || !validate_gphoto_dir(dst) {
-            1
-        } else if !move_files(src, dst) {
+        if !validate_takeout_dir(src) || !validate_gphoto_dir(dst) || !move_files(src, dst, matches.is_present("dry-run")) {
             1
         } else {
             0 // Success
@@ -45,8 +53,11 @@ fn main() {
 /// Bulk of the code: recursively walks the source directory looking for image and video files and ignoring the rest of the
 /// rubbish / metadata files. And found files are checked against the destination directory and moved over if they don't
 /// already exist.
-fn move_files(src: &Path, dst: &Path) -> bool {
+fn move_files(src: &Path, dst: &Path, dry_run: bool) -> bool {
     let unprefix_re = Regex::new(r"^(\d{4})-(\d{2})-(\d{2}).*[.]([a-zA-Z0-9]+)$").unwrap();
+
+    let mut moved = 0;
+    let mut deleted = 0;
 
     for entry in WalkDir::new(src.join("Google Photos"))
         .into_iter()
@@ -61,25 +72,44 @@ fn move_files(src: &Path, dst: &Path) -> bool {
             if let Some((year, month)) = extract_year_month(&unprefix_re, &filename_str) {
                 let dst_dir = dst.join(year).join(month);
                 if !dst_dir.exists() {
-                    std::fs::create_dir_all(&dst_dir).expect(&format!("Unable to create directory {}", dst_dir.display()));
+                    std::fs::create_dir_all(&dst_dir).unwrap_or_else(|_| panic!("Unable to create directory {}", dst_dir.display()));
                 }
-                move_or_delete(&path, dst_dir.join(filename));
+                match move_or_delete(&path, dst_dir.join(filename), dry_run) {
+                    Ok(true) => moved += 1,
+                    Ok(false) => deleted += 1,
+                    Err(e) => {
+                        println!("Error on file {}: {}", path.display(), e);
+                    }
+                }
             }
         }
     }
+    println!("Moved {} new files into place, deleted {} duplicate files", moved, deleted);
     true
 }
 
 /// Move the file into the Google Photo's directory if new, otherwise we can delete it if a duplicate.
 ///
 /// *NOTE:* 'duplicate' simply means the file exists with the same name, no MD5 or similar checking is done.
-fn move_or_delete(src: &Path, dst: PathBuf) {
+/// Returns true if moved, false if deleted
+fn move_or_delete(src: &Path, dst: PathBuf, dry_run: bool) -> Result<bool, std::io::Error> {
     if dst.exists() {
-        println!("{} is duplicate - delete", src.display());
-        std::fs::remove_file(src).expect(&format!("Unable to delete file {}", src.display()));
+        if get_file_hash(dst.as_path())? == get_file_hash(src)? {
+            println!("{} is duplicate - delete", src.display());
+            if !dry_run {
+                std::fs::remove_file(src).unwrap_or_else(|_| panic!("Unable to delete file {}", src.display()));
+            }
+        } else {
+            // TODO: Need to generate unique file name
+            println!("{} appears to be a duplicate of {}, but hashes don't match", src.display(), dst.display());
+        }
+        Ok(false)
     } else {
         println!("Moving {} to {}", src.display(), dst.display());
-        std::fs::rename(&src, &dst).expect(&format!("Move of {} to {} failed", src.display(), dst.display()));
+        if !dry_run {
+            std::fs::rename(&src, &dst).unwrap_or_else(|_| panic!("Move of {} to {} failed", src.display(), dst.display()));
+        }
+        Ok(true)
     }
 }
 
@@ -95,7 +125,7 @@ fn move_or_delete(src: &Path, dst: PathBuf) {
 /// was passed in so these strings views are backed by the memory used for 'filename'. Through all of this
 /// we never have to copy parts of 'filename' around!
 fn extract_year_month<'a>(unprefix_re: &Regex, filename: &'a str) -> Option<(&'a str, &'a str)> {
-    if filename.starts_with("IMG_") || filename.starts_with("VID_") {
+    if filename.starts_with("IMG_") || filename.starts_with("VID_") || filename.starts_with("MVIMG_") {
         Some((&filename[4..8], &filename[8..10]))
     } else if let Some(caps) = unprefix_re.captures(filename) {
         // Captures 1 and 2 are year and month so files can get sorted under the right directory
@@ -142,4 +172,17 @@ fn validate_gphoto_dir(dst: &Path) -> bool {
     } else {
         true
     }
+}
+
+/// Return the hash (MD5 or other) of a file for comparing whether they are actually identical or not
+fn get_file_hash(p: &Path) -> Result<String, std::io::Error> {
+    let mut md5digest = md5::Md5::new();
+    let mut f = std::fs::OpenOptions::new().read(true).open(p)?;
+    let mut buf: [u8; 4096] = [0; 4096];
+    let mut size = f.read(&mut buf[..])?;
+    while size > 0 {
+        md5digest.input(&buf[0..size]);
+        size = f.read(&mut buf[..])?;
+    }
+    Ok(md5digest.result_str())
 }
