@@ -14,6 +14,7 @@ use walkdir::{DirEntry, WalkDir};
 // History:
 //  2019-Nov   jason   First version, does what I want
 //                     Duplicate checks are simple name comparisons, most error checks are 'unwrap' asserts
+//  2020-Jan   jason   Added hashing check for duplicates and handling for more file name variations
 
 fn main() {
     let matches = App::new("GPhoto-Sort")
@@ -54,7 +55,7 @@ fn main() {
 /// rubbish / metadata files. And found files are checked against the destination directory and moved over if they don't
 /// already exist.
 fn move_files(src: &Path, dst: &Path, dry_run: bool) -> bool {
-    let unprefix_re = Regex::new(r"^(\d{4})-(\d{2})-(\d{2}).*[.]([a-zA-Z0-9]+)$").unwrap();
+    let unprefix_re = Regex::new(r"^(\d{4})-(\d{2})-(\d{2}).*([.][a-zA-Z0-9]+)?$").unwrap();
 
     let mut moved = 0;
     let mut deleted = 0;
@@ -69,7 +70,11 @@ fn move_files(src: &Path, dst: &Path, dry_run: bool) -> bool {
         let path = entry.path();
         if let Some(filename) = path.file_name() {
             let filename_str = filename.to_string_lossy();
-            if let Some((year, month)) = extract_year_month(&unprefix_re, &filename_str) {
+            let containing_dir = path
+                .parent()
+                .map_or_else(|| std::ffi::OsStr::new("_"), |p| p.file_name().unwrap())
+                .to_string_lossy();
+            if let Some((year, month)) = extract_year_month(&unprefix_re, &containing_dir, &filename_str) {
                 let dst_dir = dst.join(year).join(month);
                 if !dst_dir.exists() {
                     std::fs::create_dir_all(&dst_dir).unwrap_or_else(|_| panic!("Unable to create directory {}", dst_dir.display()));
@@ -101,7 +106,11 @@ fn move_or_delete(src: &Path, dst: PathBuf, dry_run: bool) -> Result<bool, std::
             }
         } else {
             // TODO: Need to generate unique file name
-            println!("{} appears to be a duplicate of {}, but hashes don't match", src.display(), dst.display());
+            println!(
+                "{} appears to be a duplicate of {}, but contents are not the same",
+                src.display(),
+                dst.display()
+            );
         }
         Ok(false)
     } else {
@@ -117,6 +126,7 @@ fn move_or_delete(src: &Path, dst: PathBuf, dry_run: bool) -> Result<bool, std::
 ///   * IMG_<year>_<month>_<day>*.jpg
 ///   * VID_<year>_<month>_<day>*.mp4
 ///   * <year>_<month>_<day>*.<ext>
+///   * 2013-03-16 #2/IMG_0003-edited(1).jpg
 ///
 /// For those new to Rust and compiler geeks, the signature of this function impresses me. The 'a annotation
 /// means the result has the same lifetime as 'filename'. That is, the resulting 'str' values are
@@ -124,9 +134,25 @@ fn move_or_delete(src: &Path, dst: PathBuf, dry_run: bool) -> Result<bool, std::
 /// 'caps' which is returned by the regex. The compiler correctly sorts all of this out "knowing" that 'filename'
 /// was passed in so these strings views are backed by the memory used for 'filename'. Through all of this
 /// we never have to copy parts of 'filename' around!
-fn extract_year_month<'a>(unprefix_re: &Regex, filename: &'a str) -> Option<(&'a str, &'a str)> {
+fn extract_year_month<'a>(unprefix_re: &Regex, containing_dir: &'a str, filename: &'a str) -> Option<(&'a str, &'a str)> {
     if filename.starts_with("IMG_") || filename.starts_with("VID_") || filename.starts_with("MVIMG_") {
-        Some((&filename[4..8], &filename[8..10]))
+        let year = &filename[4..8];
+        let month = &filename[8..10];
+        if year.parse::<i32>().is_ok() && month.parse::<i32>().is_ok() {
+            Some((&filename[4..8], &filename[8..10]))
+        } else {
+            // Example: 2013-03-16 #2/IMG_0003-edited(1).jpg
+            // There isn't a year and month in the same so try to parse the containing directory
+            if let Some(caps) = unprefix_re.captures(containing_dir) {
+                Some((caps.get(1).unwrap().as_str(), caps.get(2).unwrap().as_str()))
+            } else {
+                println!(
+                    "Unable to parse year and month from filename {}, or containing directory {}",
+                    filename, containing_dir
+                );
+                None
+            }
+        }
     } else if let Some(caps) = unprefix_re.captures(filename) {
         // Captures 1 and 2 are year and month so files can get sorted under the right directory
         // Ignore 3 and 4, the day and extension
@@ -176,9 +202,10 @@ fn validate_gphoto_dir(dst: &Path) -> bool {
 
 /// Return the hash (MD5 or other) of a file for comparing whether they are actually identical or not
 fn get_file_hash(p: &Path) -> Result<String, std::io::Error> {
+    const BUF_SIZE: usize = 1024 * 1024;
     let mut md5digest = md5::Md5::new();
     let mut f = std::fs::OpenOptions::new().read(true).open(p)?;
-    let mut buf: [u8; 4096] = [0; 4096];
+    let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
     let mut size = f.read(&mut buf[..])?;
     while size > 0 {
         md5digest.input(&buf[0..size]);
