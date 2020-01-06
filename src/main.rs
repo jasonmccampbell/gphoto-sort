@@ -12,7 +12,7 @@ use std::io::Read;
 use std::path::*;
 use walkdir::{DirEntry, WalkDir};
 
-const YEAR_DATE_RE: &str = r"^(?i)(IMG_|VID_|MVIMG_)?(\d{4})[-_](\d{2})[-_](\d{2})$";
+const YEAR_DATE_RE: &str = r"^(?i)(IMG_|VID_|MVIMG_)?(\d{4})[-_](\d{2})[-_](\d{2}).*$";
 
 // History:
 //  2019-Nov   jason   First version, does what I want
@@ -177,7 +177,9 @@ fn extract_year_month<'a>(unprefix_re: &Regex, containing_dir: &'a str, file_ste
 fn is_of_interest(entry: &DirEntry) -> bool {
     match entry.path().extension() {
         None => false,
-        Some(ext) => ext.eq("jpg") || ext.eq("JPG") || ext.eq("mp4") || ext.eq("MP4"),
+        Some(ext) => {
+            ext.eq("jpg") || ext.eq("JPG") || ext.eq("mp4") || ext.eq("MP4") || ext.eq("MOV") || ext.eq("mov") || ext.eq("GIF") || ext.eq("gif")
+        }
     }
 }
 
@@ -260,5 +262,9 @@ fn test_extra_year_date() {
     assert_eq!(
         extract_year_month(&unprefix_re, "2020-14-17", "IMG_0004-edited(17)"),
         Some(("2020", "14"))
+    );
+    assert_eq!(
+        extract_year_month(&unprefix_re, "2021-13-17 #2", "IMG_0004-edited(17)"),
+        Some(("2021", "13"))
     );
 }
