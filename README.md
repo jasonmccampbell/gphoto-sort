@@ -23,11 +23,11 @@ If your Takeout archive is extracted to /tmp and your Google Drive sync'ing is i
 
 ./gphoto-sort [-n | --dry-run] /tmp/Takeout /archive/Google\ Drive/Google\ Photos
 
-will find all .jpg and .mp4 files in the Takeout directory with date-based names and move them into
-the appropriate date-based directory under "Google Photos". Specifically, files are typically named using
+will find common image and video files (JPG, PNG, GIF, MP4, MOV) in the Takeout directory with date-based names 
+and move them into the appropriate date-based directory under "Google Photos". Specifically, files are typically named using
 the following forms:
- * IMG_<year>_<month>_<day>*.jpg (or .png or .gif)
- * MVIMG_<year>_<month>_<day>*.jpg (or .png or .gif)
+ * IMG_<year>_<month>_<day>*.jpg (or .png, etc)
+ * MVIMG_<year>_<month>_<day>*.gif
  * VID_<year>_<month>_<day>*.mp4 (or .mov)
  * \<year\>\_\<month>\_\<day\>\*.\*
  * \<year\>\_\<month>\_\<day\>\*/IMG_*
@@ -61,7 +61,7 @@ Ditto for .mp4/.MP4 files.
 # Platform
 This utility was written for Linux and may or may not work on others.
 
-Please contact me with any questions.
+Comments, questions, bug reports, and pull-requests are all welcome.
 
 # Why Rust?
 Rust is a system-level language geared towards performance and reliability, not quickly scripting together a hack. I
