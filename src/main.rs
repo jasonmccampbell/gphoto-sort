@@ -18,6 +18,9 @@ const YEAR_DATE_RE: &str = r"^(?i)(IMG_|VID_|MVIMG_)?(\d{4})[-_](\d{2})[-_](\d{2
 //  2019-Nov   jason   First version, does what I want
 //                     Duplicate checks are simple name comparisons, most error checks are 'unwrap' asserts
 //  2020-Jan   jason   Added hashing check for duplicates and handling for more file name variations
+//                     Added -n/--dry-run option
+//                     More file types and date-based naming patterns are recognized
+//                     Reports total number of moved and deleted files at the end of the run
 
 fn main() {
     let matches = App::new("GPhoto-Sort")
@@ -178,7 +181,18 @@ fn is_of_interest(entry: &DirEntry) -> bool {
     match entry.path().extension() {
         None => false,
         Some(ext) => {
-            ext.eq("jpg") || ext.eq("JPG") || ext.eq("mp4") || ext.eq("MP4") || ext.eq("MOV") || ext.eq("mov") || ext.eq("GIF") || ext.eq("gif")
+            // est is OsStr. Is there a better way? A static, immutable HashSet is the C++-ish pattern I'd normally use
+            // but construction isn't const (yet)
+            ext.eq("jpg")
+                || ext.eq("JPG")
+                || ext.eq("png")
+                || ext.eq("PNG")
+                || ext.eq("mp4")
+                || ext.eq("MP4")
+                || ext.eq("mov")
+                || ext.eq("MOV")
+                || ext.eq("gif")
+                || ext.eq("GIF")
         }
     }
 }
