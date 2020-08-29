@@ -1,5 +1,5 @@
 # gphoto-sort
-Incrementally sort photos from a Google Takeout directory structure into an existing Google Drive/Google Photos 
+A utility to incrementally sort photos from a Google Takeout directory structure into an existing Google Drive/Google Photos 
 directory structure
 
 This is for those of us who were used to sync'ing Google Photos to Google Drive, and then sync'ing Google Drive locally
@@ -12,10 +12,10 @@ Google-drive organized tree, then checks to see if the file exists or not. New f
 location and duplicates are deleted.
 
 Of course, the easiest option would be to switch to the Takeout directory structure. However, if the Google Drive 
-structure has already been backed up to a different cloud service, changing the structure may result in re-uploading
+structure has already been backed up to a different cloud service, changing the structure results in re-uploading
 dozens or hundreds of GBs of photos. Maintaining the Google Drive structure avoids this.
 
-This utility is also useful for merging multiple Takeout archives into a single tree. It de-duplicates the images
+This utility is also useful for merging multiple Takeout archives (multiple family members) into a single tree. It de-duplicates the images
 that have the same name (such as from shared albums) while keeping differing images that have name collisions.
 
 # Example usage
@@ -64,9 +64,11 @@ This utility was written for Linux and may or may not work on others.
 Comments, questions, bug reports, and pull-requests are all welcome.
 
 # Why Rust?
-Rust is a system-level language geared towards performance and reliability, not quickly scripting together a hack. I
-originally wrote this in Bash, but got to the point where it exceeded my Bash-foo and I was having to look too much up.
-Normally I'd failover to Python, but I really like Rust and figured I'd try it out. I'm impressed with
-Rust's "dynamic range" in being able to hack together a utility high-level script like this, as well handle more typical
-low-level, performant projects. Being able to so easily add minor unit tests is a huge bonus, as it wouldn't be worth
-the hassle in many languages.
+I originally started writing this in Bash, but got to the point where it exceeded my Bash-foo and I was having to look too much up.
+Normally I'd failover to Python, but I write C++ professionally and like the idea of utilities being small and fast. However, I would
+never use C++ because it's too much work. I was curious, how is Rust's "dynamic range", its ability to do high-level script-type work 
+as well as the typical low-level development? 
+
+As you can see, doing this in Rust is only a little more code than Python would likely have been. It is really the 
+[walkdir](https://crates.io/crates/walkdir) and [regex](https://crates.io/crates/regex) crates combined with Cargo that make it so easy. 
+Cargo actually makes package management considerably easier than using Python, IMHO, because packages are local to a project.
