@@ -1,11 +1,13 @@
 extern crate clap;
 extern crate crypto;
+extern crate rayon;
 extern crate regex;
 extern crate walkdir;
 
 use clap::{App, Arg};
 use crypto::digest::Digest;
 use crypto::md5;
+use rayon::prelude::*;
 use regex::Regex;
 use std::ffi::OsStr;
 use std::io::Read;
@@ -63,48 +65,51 @@ fn main() {
 fn move_files(src: &Path, dst: &Path, dry_run: bool) -> bool {
     let unprefix_re = Regex::new(YEAR_DATE_RE).unwrap();
 
-    let mut moved = 0;
-    let mut deleted = 0;
-
-    for entry in WalkDir::new(src.join("Google Photos"))
+    let (moved, deleted) = WalkDir::new(src.join("Google Photos"))
         .into_iter()
         .filter_entry(|e| e.file_name().to_str().map_or(false, |s| !s.starts_with("Hangout")))
         .filter_map(|e| e.ok())
         .filter(|e| !e.path().is_dir())
         .filter(is_of_interest)
-    {
-        let path = entry.path();
-        if let Some(file_stem) = path.file_stem() {
-            let file_stem_str = file_stem.to_string_lossy();
-            let file_ext = path.extension().unwrap();
-            let containing_dir = path
-                .parent()
-                .map_or_else(|| std::ffi::OsStr::new("_"), |p| p.file_name().unwrap())
-                .to_string_lossy();
-            if let Some((year, month)) = extract_year_month(&unprefix_re, &containing_dir, &file_stem_str) {
-                let dst_dir = dst.join(year).join(month);
-                if !dst_dir.exists() {
-                    std::fs::create_dir_all(&dst_dir).unwrap_or_else(|_| panic!("Unable to create directory {}", dst_dir.display()));
-                }
-
-                let file_name = format!("{}.{}", file_stem_str, file_ext.to_string_lossy());
-                match move_or_delete(&path, dst_dir.join(file_name), file_stem, &file_ext, dry_run, 0) {
-                    Ok(true) => moved += 1,
-                    Ok(false) => deleted += 1,
-                    Err(e) => {
-                        println!("Error on file {}: {}", path.display(), e);
+        .par_bridge()
+        .map(|entry| {
+            let path = entry.path();
+            if let Some(file_stem) = path.file_stem() {
+                let file_stem_str = file_stem.to_string_lossy();
+                let file_ext = path.extension().unwrap();
+                let containing_dir = path
+                    .parent()
+                    .map_or_else(|| std::ffi::OsStr::new("_"), |p| p.file_name().unwrap())
+                    .to_string_lossy();
+                if let Some((year, month)) = extract_year_month(&unprefix_re, &containing_dir, &file_stem_str) {
+                    let dst_dir = dst.join(year).join(month);
+                    if !dst_dir.exists() {
+                        std::fs::create_dir_all(&dst_dir).unwrap_or_else(|_| panic!("Unable to create directory {}", dst_dir.display()));
                     }
+
+                    let file_name = format!("{}.{}", file_stem_str, file_ext.to_string_lossy());
+                    match move_or_delete(&path, dst_dir.join(file_name), file_stem, &file_ext, dry_run, 0) {
+                        Ok(true) => (1, 0),
+                        Ok(false) => (0, 1),
+                        Err(e) => {
+                            println!("Error on file {}: {}", path.display(), e);
+                            (0, 0)
+                        }
+                    }
+                } else {
+                    (0, 0)
                 }
+            } else {
+                (0, 0)
             }
-        }
-    }
+        })
+        .reduce(|| (0, 0), |res, acc| (res.0 + acc.0, res.1 + acc.1));
     println!("Moved {} new files into place, deleted {} duplicate files", moved, deleted);
     true
 }
 
 /// Move the file into the Google Photo's directory if new, otherwise we can delete it if a duplicate.
-///
-/// *NOTE:* 'duplicate' simply means the file exists with the same name, no MD5 or similar checking is done.
+/// Files are first checked for name matches and, if found, checked by calculating the hash for both.
 /// Returns true if moved, false if deleted
 fn move_or_delete(
     src: &Path,
