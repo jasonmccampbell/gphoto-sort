@@ -72,3 +72,8 @@ as well as the typical low-level development?
 As you can see, doing this in Rust is only a little more code than Python would likely have been. It is really the 
 [walkdir](https://crates.io/crates/walkdir) and [regex](https://crates.io/crates/regex) crates combined with Cargo that make it so easy. 
 Cargo actually makes package management considerably easier than using Python, IMHO, because packages are local to a project.
+
+A big secondary win is leveraging the excellent [Rayon](https://crates.io/crates/rayon) crate. Converting this from a 'dumb' sequential
+script to a modern parallel utility was as simple as converting the for loop to map() call and adding a trivial reduce step at the end. 
+
+Big props to the authors of all these crates.

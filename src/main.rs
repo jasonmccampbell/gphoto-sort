@@ -1,11 +1,13 @@
 extern crate clap;
 extern crate crypto;
+extern crate rayon;
 extern crate regex;
 extern crate walkdir;
 
 use clap::{App, Arg};
 use crypto::digest::Digest;
 use crypto::md5;
+use rayon::prelude::*;
 use regex::Regex;
 use std::ffi::OsStr;
 use std::io::Read;
@@ -69,6 +71,7 @@ fn move_files(src: &Path, dst: &Path, dry_run: bool) -> bool {
         .filter_map(|e| e.ok())
         .filter(|e| !e.path().is_dir())
         .filter(is_of_interest)
+        .par_bridge()
         .map(|entry| {
             let path = entry.path();
             if let Some(file_stem) = path.file_stem() {
@@ -100,7 +103,7 @@ fn move_files(src: &Path, dst: &Path, dry_run: bool) -> bool {
                 (0, 0)
             }
         })
-        .fold((0, 0), |res, acc| (res.0 + acc.0, res.1 + acc.1));
+        .reduce(|| (0, 0), |res, acc| (res.0 + acc.0, res.1 + acc.1));
     println!("Moved {} new files into place, deleted {} duplicate files", moved, deleted);
     true
 }
