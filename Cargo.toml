@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 clap = "2"
-rayon = "1.4"
+rayon = "1"
 regex = "1"
 walkdir = "2"
 rust-crypto = "0.2"
