@@ -14,7 +14,7 @@ use std::io::Read;
 use std::path::*;
 use walkdir::{DirEntry, WalkDir};
 
-const YEAR_DATE_RE: &str = r"^(?i)(IMG_|VID_|MVIMG_|PXL_)?(\d{4})[-_]?(\d{2})[-_]?(\d{2}).*$";
+const YEAR_DATE_RE: &str = r"^(?i)(IMG|VID|MVIMG|PXL)?[-_]?(\d{4})[-_]?(\d{2})[-_]?(\d{2}).*$";
 
 // History:
 //  2019-Nov   jason   First version, does what I want
