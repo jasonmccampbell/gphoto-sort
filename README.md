@@ -1,6 +1,6 @@
 # gphoto-sort
 A utility to incrementally sort photos from a Google Takeout directory structure into an existing Google Drive/Google Photos 
-directory structure
+directory structure, removing duplicates in the process.
 
 This is for those of us who were used to sync'ing Google Photos to Google Drive, and then sync'ing Google Drive locally
 as a backup. Unfortunately the directory structures of the two are different, plus the Google Takeout archives are
@@ -65,8 +65,8 @@ Comments, questions, bug reports, and pull-requests are all welcome.
 
 # Why Rust?
 I originally started writing this in Bash, but got to the point where it exceeded my Bash-foo and I was having to look too much up.
-Normally I'd failover to Python, but I write C++ professionally and like the idea of utilities being small and fast. However, I would
-never use C++ because it's too much work. I was curious, how is Rust's "dynamic range", its ability to do high-level script-type work 
+Normally I'd failover to Python, but I write C++ professionally and like the idea of utilities being small and fast. I would
+never use C++ because it's too much work so I was curious about Rust's "dynamic range", its ability to do high-level script-type work 
 as well as the typical low-level development? 
 
 As you can see, doing this in Rust is only a little more code than Python would likely have been. It is really the 
